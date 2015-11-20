@@ -1,6 +1,8 @@
 -module(turnstile).
 -export([start/0, init/1, coin/0, push/0]).
 
+-include_lib("eunit/include/eunit.hrl").
+
 -define(TURNSTILE_INSTANCE_NAME, turnstile).
 
 start() ->
@@ -21,13 +23,19 @@ loop(State) ->
 server_tell(To, Message) ->
 	To ! {?TURNSTILE_INSTANCE_NAME, Message}.
 
-server_handle_coin(From, State) ->
+coin_action(State) ->
 	case State of
-		locked ->
-		        server_tell(From, "State changed to unlocked"), 	
-			unlocked;
-		_ -> server_tell(From, "Hey, If you place a coin when the turnstile is unlocked, you loose your coin."),
-		     State
+		locked -> {ok, unlocked};
+		_ -> {error, invalid_action}
+	end.
+
+server_handle_coin(From, CurrentState) ->
+	case coin_action(CurrentState) of
+		{ok, locked} ->
+		       server_tell(From, "State changed to unlocked"),
+			locked;
+		{error, invalid_action} -> server_tell(From, "Hey, If you place a coin when the turnstile is unlocked, you loose your coin."),
+			     CurrentState
 	end.
 
 server_handle_push(From, State) ->
@@ -51,4 +59,15 @@ await_result() ->
 coin() -> ask(coin).
 
 push() -> ask(push).
+
+%% Unit tests
+a_coin_action_should_unlock_a_locked_turnstile_test() ->
+	State = locked,
+	Result = coin_action(State),
+	?assertEqual(Result, {ok, unlocked}).
+
+a_coin_action_should_not_unlock_an_already_unlocked_turnstile_test() ->
+	State = unlocked,
+	Result = coin_action(State),
+	?assertEqual(Result, {error, invalid_action}).
 
