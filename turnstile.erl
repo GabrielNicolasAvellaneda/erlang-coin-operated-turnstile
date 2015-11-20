@@ -30,22 +30,25 @@ may_push_action(unlocked) -> {ok, locked};
 may_push_action(locked) -> {error, invalid_action}.
 
 server_handle_coin(From, CurrentState) ->
-	case may_coin_action(CurrentState) of
-		{ok, NewState} ->
-		       server_tell(From, io_lib:format("State changed to ~s", [NewState])),
-			NewState;
-		{error, invalid_action} -> server_tell(From, "Hey, if you place a coin when the turnstile is unlocked, you loose your coin."),
-			     CurrentState
-	end.
+	Result = may_coin_action(CurrentState),
+	server_handle_coin_result(Result, From, CurrentState).
+
+server_handle_coin_result({ok, NewState}, From, _LastState) ->
+	server_tell(From, io_lib:format("State changed to ~s", [NewState])),
+	NewState;
+server_handle_coin_result({error, invalid_action}, From, LastState) ->
+	server_tell(From, "Hey, if you place a coin when the turnstile is unlocked, you loose your coin."),
+	LastState.
 
 server_handle_push(From, CurrentState) ->
-	case may_push_action(CurrentState) of 
-		{ok, NewState} ->
-			server_tell(From, io_lib:format("State changed to ~s", [NewState])),
-			NewState;
-		{error, invalid_action} -> server_tell(From, "Hey, you need to place a coin to pass this turnstile! Please look at your pocket!"),
-		     CurrentState
-	end.
+	Result = may_push_action(CurrentState),
+	server_handle_push_result(Result, From, CurrentState).
+
+server_handle_push_result({ok, NewState}, From, _LastState) ->
+	server_tell(From, io_lib:format("State changed to ~s", [NewState])),
+	NewState;
+server_handle_push_result({error, invalid_action}, From, LastState) -> server_tell(From, "Hey, you need to place a coin to pass this turnstile! Please look at your pocket!"),
+	LastState.
 
 ask(Message) ->
 	?TURNSTILE_INSTANCE_NAME ! {self(), Message},
