@@ -23,28 +23,34 @@ loop(State) ->
 server_tell(To, Message) ->
 	To ! {?TURNSTILE_INSTANCE_NAME, Message}.
 
-coin_action(State) ->
+may_coin_action(State) ->
 	case State of
 		locked -> {ok, unlocked};
 		_ -> {error, invalid_action}
 	end.
 
+may_push_action(State) ->
+	case State of
+		unlocked -> {ok, locked};
+		_ -> {error, invalid_action}
+	end.
+
 server_handle_coin(From, CurrentState) ->
-	case coin_action(CurrentState) of
-		{ok, locked} ->
-		       server_tell(From, "State changed to unlocked"),
-			locked;
+	case may_coin_action(CurrentState) of
+		{ok, NewState} ->
+		       server_tell(From, io_lib:format("State changed to ~s", [NewState])),
+			NewState;
 		{error, invalid_action} -> server_tell(From, "Hey, If you place a coin when the turnstile is unlocked, you loose your coin."),
 			     CurrentState
 	end.
 
-server_handle_push(From, State) ->
-	case State of
-		unlocked ->
-			server_tell(From, "State changed to locked"),	       
-			locked;
-		_ -> server_tell(From, "Hey, you need to place a coin to pass this turnstile! Please look at your pocket!"),
-		     State
+server_handle_push(From, CurrentState) ->
+	case may_push_action(CurrentState) of 
+		{ok, NewState} ->
+			server_tell(From, io_lib:format("State changed to ~s", [NewState])),
+			NewState;
+		{error, invalid_action} -> server_tell(From, "Hey, you need to place a coin to pass this turnstile! Please look at your pocket!"),
+		     CurrentState
 	end.
 
 ask(Message) ->
@@ -63,11 +69,21 @@ push() -> ask(push).
 %% Unit tests
 a_coin_action_should_unlock_a_locked_turnstile_test() ->
 	State = locked,
-	Result = coin_action(State),
-	?assertEqual(Result, {ok, unlocked}).
+	{ok, NewState} = may_coin_action(State),
+	?assertEqual(NewState, unlocked).
 
-a_coin_action_should_not_unlock_an_already_unlocked_turnstile_test() ->
+a_coin_action_should_be_ignored_on_an_unlocked_turnstile_test() ->
 	State = unlocked,
-	Result = coin_action(State),
+	Result = may_coin_action(State),
+	?assertEqual(Result, {error, invalid_action}).
+
+a_push_action_should_lock_an_unlocked_turnstile_test() ->
+	State = unlocked,
+	{ok, NewState} = may_push_action(State),
+	?assertEqual(NewState, locked).
+
+a_push_action_should_be_ignored_on_a_locked_turnstile_test() ->
+	State = locked,
+	Result = may_push_action(State),
 	?assertEqual(Result, {error, invalid_action}).
 
